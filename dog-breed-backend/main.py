@@ -1,5 +1,6 @@
 # main.py - Clean version with your trained model
 from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 import io
 import json
@@ -9,6 +10,15 @@ import tensorflow_hub as hub
 import os
 
 app = FastAPI(title="Dog Breed Predictor - Real Model")
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # React app URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Global variables for model and breeds
 model = None
@@ -22,7 +32,7 @@ def load_breeds():
             return json.load(f)
     except FileNotFoundError:
         print("breeds.json not found, using fallback breeds")
-        return ["golden_retriever", "labrador_retriever", "german_shepherd", "bulldog", "poodle"]
+        return -1
 
 def create_model():
     """Create the same model architecture as your Colab training code"""

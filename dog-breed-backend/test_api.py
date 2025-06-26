@@ -46,7 +46,7 @@ def test_with_dog_image(image_path=None):
     # If no specific image provided, look for common dog image files
     if image_path is None:
         potential_images = [
-            "lunapt2.jpeg",  # Special test for Luna
+            "dog_images/lunapt2.jpeg",  # Special test for Luna
         ]
         
         # Also scan directory for any image files
