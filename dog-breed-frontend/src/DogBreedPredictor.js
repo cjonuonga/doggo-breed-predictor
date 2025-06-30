@@ -7,16 +7,29 @@ const DogBreedPredictor = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [apiStatus, setApiStatus] = useState("checking");
+  const [cameraMode, setCameraMode] = useState(false);
+  const [stream, setStream] = useState(null);
   const fileInputRef = useRef(null);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
 
   // Check API status on component mount
   React.useEffect(() => {
     checkApiStatus();
   }, []);
 
+  // Cleanup camera stream when component unmounts
+  React.useEffect(() => {
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [stream]);
+
   const checkApiStatus = async () => {
     try {
-      const response = await fetch("http://127.0.0.1:8000/health");
+      const response = await fetch("https://whatsmybreed.duckdns.org/health");
       if (response.ok) {
         setApiStatus("connected");
       } else {
@@ -40,6 +53,80 @@ const DogBreedPredictor = () => {
 
       // Clear previous prediction
       setPrediction(null);
+    }
+  };
+
+  const startCamera = async () => {
+    try {
+      setError(null);
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: "environment", // Try to use back camera on mobile
+        },
+      });
+
+      setStream(mediaStream);
+      setCameraMode(true);
+
+      // Wait for video element to be ready
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = mediaStream;
+        }
+      }, 100);
+    } catch (err) {
+      console.error("Error accessing camera:", err);
+      setError(
+        "Could not access camera. Please make sure you have granted camera permissions."
+      );
+    }
+  };
+
+  const stopCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      setStream(null);
+    }
+    setCameraMode(false);
+  };
+
+  const capturePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      const context = canvas.getContext("2d");
+
+      // Set canvas dimensions to match video
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      // Draw video frame to canvas
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      // Convert canvas to blob
+      canvas.toBlob(
+        (blob) => {
+          if (blob) {
+            // Create a file from the blob
+            const file = new File([blob], "camera-capture.jpg", {
+              type: "image/jpeg",
+            });
+            setSelectedFile(file);
+
+            // Create preview from canvas
+            const dataURL = canvas.toDataURL("image/jpeg");
+            setPreview(dataURL);
+
+            // Clear previous prediction
+            setPrediction(null);
+
+            // Stop camera
+            stopCamera();
+          }
+        },
+        "image/jpeg",
+        0.9
+      );
     }
   };
 
@@ -76,7 +163,7 @@ const DogBreedPredictor = () => {
     formData.append("file", selectedFile);
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/predict", {
+      const response = await fetch("https://whatsmybreed.duckdns.org/health", {
         method: "POST",
         body: formData,
       });
@@ -100,6 +187,7 @@ const DogBreedPredictor = () => {
     setPreview(null);
     setPrediction(null);
     setError(null);
+    stopCamera();
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -110,25 +198,14 @@ const DogBreedPredictor = () => {
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-4xl mx-auto px-4 py-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                🐕 Dog Breed Predictor
-              </h1>
-              <p className="text-gray-600 mt-1">
-                Upload a photo to identify your dog's breed using AI
-              </p>
-            </div>
-            <div className="flex items-center space-x-2">
-              <div
-                className={`w-3 h-3 rounded-full ${
-                  apiStatus === "connected" ? "bg-green-500" : "bg-red-500"
-                }`}
-              ></div>
-              <span className="text-sm text-gray-600">
-                API {apiStatus === "connected" ? "Connected" : "Disconnected"}
-              </span>
-            </div>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">
+              🐕 Dog Breed Predictor
+            </h1>
+            <p className="text-gray-600 mt-1">
+              Upload a photo or take a picture to identify your dog's breed
+              using AI
+            </p>
           </div>
         </div>
       </div>
@@ -142,41 +219,145 @@ const DogBreedPredictor = () => {
               Upload Dog Image
             </h2>
 
-            {/* Drag & Drop Area */}
-            <div
-              className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors cursor-pointer"
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              {preview ? (
-                <div className="space-y-4">
-                  <img
-                    src={preview}
-                    alt="Preview"
-                    className="max-w-full max-h-64 mx-auto rounded-lg shadow-md"
+            {/* Camera Mode */}
+            {cameraMode ? (
+              <div className="space-y-4">
+                <div className="relative bg-black rounded-lg overflow-hidden">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    className="w-full h-64 object-cover"
                   />
-                  <div className="text-sm text-gray-600">
-                    <p className="font-medium">{selectedFile?.name}</p>
-                    <p>{(selectedFile?.size / 1024).toFixed(1)} KB</p>
-                  </div>
+                  <canvas ref={canvasRef} className="hidden" />
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="text-6xl">📷</div>
-                  <div>
-                    <p className="text-lg font-medium text-gray-700">
-                      Drop your dog image here
-                    </p>
-                    <p className="text-gray-500">or click to browse files</p>
-                  </div>
-                  <p className="text-sm text-gray-400">
-                    Supports JPG, PNG, GIF
-                  </p>
-                </div>
-              )}
-            </div>
 
+                <div className="flex space-x-3">
+                  <button
+                    onClick={capturePhoto}
+                    className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center justify-center"
+                  >
+                    <svg
+                      className="w-5 h-5 mr-2"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
+                      />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
+                      />
+                    </svg>
+                    Capture Photo
+                  </button>
+
+                  <button
+                    onClick={stopCamera}
+                    className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Drag & Drop Area */}
+                <div
+                  className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors cursor-pointer"
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {preview ? (
+                    <div className="space-y-4">
+                      <img
+                        src={preview}
+                        alt="Preview"
+                        className="max-w-full max-h-64 mx-auto rounded-lg shadow-md"
+                      />
+                      <div className="text-sm text-gray-600">
+                        <p className="font-medium">{selectedFile?.name}</p>
+                        <p>{(selectedFile?.size / 1024).toFixed(1)} KB</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="text-6xl">📷</div>
+                      <div>
+                        <p className="text-lg font-medium text-gray-700">
+                          Drop your dog image here
+                        </p>
+                        <p className="text-gray-500">
+                          or click to browse files
+                        </p>
+                      </div>
+                      <p className="text-sm text-gray-400">
+                        Supports JPG, PNG, GIF
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Upload Options */}
+                <div className="grid grid-cols-2 gap-3 mt-4">
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center justify-center px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                  >
+                    <svg
+                      className="w-5 h-5 mr-2"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                      />
+                    </svg>
+                    Upload File
+                  </button>
+
+                  <button
+                    onClick={startCamera}
+                    className="flex items-center justify-center px-4 py-3 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors"
+                  >
+                    <svg
+                      className="w-5 h-5 mr-2"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
+                      />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
+                      />
+                    </svg>
+                    Take Photo
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Hidden Input Field */}
             <input
               ref={fileInputRef}
               type="file"
@@ -186,50 +367,54 @@ const DogBreedPredictor = () => {
             />
 
             {/* Action Buttons */}
-            <div className="flex space-x-3 mt-6">
-              <button
-                onClick={predictBreed}
-                disabled={!selectedFile || loading || apiStatus !== "connected"}
-                className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-              >
-                {loading ? (
-                  <span className="flex items-center justify-center">
-                    <svg
-                      className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      ></circle>
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      ></path>
-                    </svg>
-                    Analyzing...
-                  </span>
-                ) : (
-                  "Predict Breed"
-                )}
-              </button>
-
-              {selectedFile && (
+            {!cameraMode && (
+              <div className="flex space-x-3 mt-6">
                 <button
-                  onClick={clearSelection}
-                  className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  onClick={predictBreed}
+                  disabled={
+                    !selectedFile || loading || apiStatus !== "connected"
+                  }
+                  className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                 >
-                  Clear
+                  {loading ? (
+                    <span className="flex items-center justify-center">
+                      <svg
+                        className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        ></circle>
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        ></path>
+                      </svg>
+                      Analyzing...
+                    </span>
+                  ) : (
+                    "Predict Breed"
+                  )}
                 </button>
-              )}
-            </div>
+
+                {selectedFile && (
+                  <button
+                    onClick={clearSelection}
+                    className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Error Message */}
             {error && (

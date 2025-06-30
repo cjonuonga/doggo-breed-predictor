@@ -2,4 +2,4 @@ requirements.txt
 __pycache__
 dogbreed_venv_arm
 dogbreed_venv
-20250619-08341750322059-full-dataset-dog-mobilenetv2-cj.weights.h5
+dog-breed-backend/20250619-08341750322059-full-dataset-dog-mobilenetv2-cj.weights.h5
