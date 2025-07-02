@@ -163,7 +163,7 @@ const DogBreedPredictor = () => {
     formData.append("file", selectedFile);
 
     try {
-      const response = await fetch("https://whatsmybreed.duckdns.org/health", {
+      const response = await fetch("https://whatsmybreed.duckdns.org/predict", {
         method: "POST",
         body: formData,
       });
