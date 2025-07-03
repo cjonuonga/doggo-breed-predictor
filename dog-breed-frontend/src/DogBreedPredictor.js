@@ -203,8 +203,7 @@ const DogBreedPredictor = () => {
               🐕 Dog Breed Predictor
             </h1>
             <p className="text-gray-600 mt-1">
-              Upload a photo or take a picture to identify your dog's breed
-              using AI
+              Upload a photo or take a picture to identify your dog's breed.
             </p>
           </div>
         </div>
@@ -505,9 +504,7 @@ const DogBreedPredictor = () => {
                 <p className="text-lg">
                   Upload an image to see prediction results
                 </p>
-                <p className="text-sm mt-2">
-                  Our AI will identify the dog breed with confidence scores
-                </p>
+                <p className="text-sm mt-2"></p>
               </div>
             )}
           </div>
